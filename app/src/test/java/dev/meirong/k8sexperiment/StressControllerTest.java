@@ -30,6 +30,7 @@ class StressControllerTest {
         var response = restTemplate.getForEntity("/stress/cpu?seconds=0", Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsKey("primes_found");
+        assertThat(response.getBody()).containsKey("duration_seconds");
     }
 
     @Test
