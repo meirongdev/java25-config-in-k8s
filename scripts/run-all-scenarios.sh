@@ -94,6 +94,9 @@ run_scenario "08-g1gc-2c2g"   "k8s/scenarios/08-g1gc-2c2g.yaml"         "java-ex
 run_scenario "09-zgc-2c2g"    "k8s/scenarios/09-zgc-2c2g.yaml"          "java-experiment"       "java-experiment"
 run_scenario "10-g1gc-4c4g"   "k8s/scenarios/10-g1gc-4c4g.yaml"         "java-experiment"       "java-experiment"
 run_scenario "11-zgc-4c4g"    "k8s/scenarios/11-zgc-4c4g.yaml"          "java-experiment"       "java-experiment"
+run_scenario "12-zgcgen-1c1g" "k8s/scenarios/12-zgcgen-1c1g.yaml"       "java-experiment"       "java-experiment"
+run_scenario "13-zgcgen-2c2g" "k8s/scenarios/13-zgcgen-2c2g.yaml"       "java-experiment"       "java-experiment"
+run_scenario "14-zgcgen-4c4g" "k8s/scenarios/14-zgcgen-4c4g.yaml"       "java-experiment"       "java-experiment"
 
 echo "" | tee -a "$RESULTS/summary.txt"
 echo "=== All scenarios complete ===" | tee -a "$RESULTS/summary.txt"
