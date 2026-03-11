@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-experiment-large
+  labels:
+    scenario: "07-pod-sizing-large"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-experiment-large
+  template:
+    metadata:
+      labels:
+        app: java-experiment-large
+    spec:
+      containers:
+        - name: app
+          image: java-experiment:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:+UseG1GC -XX:MaxRAMPercentage=75"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "750m"
+            limits:
+              memory: "512Mi"
+              cpu: "750m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-experiment-large
+spec:
+  selector:
+    app: java-experiment-large
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
