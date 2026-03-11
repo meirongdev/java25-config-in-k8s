@@ -17,7 +17,7 @@ run_pod_sizing_comparison() {
   kubectl delete deployment java-experiment --ignore-not-found=true
   kubectl delete service java-experiment --ignore-not-found=true
 
-  echo "[2/6] 部署小副本（3 × 0.25c）..."
+  echo "[2/6] 部署小副本（3 × 0.5c）..."
   kubectl apply -f "k8s/scenarios/06-pod-sizing-small.yaml"
   kubectl rollout status deployment/java-experiment-small --timeout=120s
   sleep 15
@@ -29,7 +29,7 @@ run_pod_sizing_comparison() {
   k6 run -e BASE_URL=http://localhost:8080 k6/load-test.js 2>&1 | tee -a "${RESULTS_DIR}/${TIMESTAMP}-06-small.txt"
   kill $PF_PID 2>/dev/null || true
 
-  echo "[4/6] 部署大副本（1 × 0.75c）..."
+  echo "[4/6] 部署大副本（1 × 1.5c）..."
   kubectl apply -f "k8s/scenarios/06-pod-sizing-large.yaml"
   kubectl rollout status deployment/java-experiment-large --timeout=120s
   sleep 15
@@ -57,6 +57,11 @@ if [[ "$SCENARIO" == "06-pod-sizing" ]]; then
   run_pod_sizing_comparison
   exit 0
 fi
+
+# 0. 清理旧环境
+echo "[0/5] 清理旧环境 (Deployment & Service)..."
+kubectl delete deployment java-experiment --ignore-not-found=true --wait=true
+kubectl delete service java-experiment --ignore-not-found=true
 
 # 1. 部署场景
 echo ""

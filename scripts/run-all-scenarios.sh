@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 运行所有实验场景并收集数据（v2: 1c/1Gi 基准，无显式 GC 类型）
+# 运行所有实验场景并收集数据（v3: 补齐显式 GC 场景，新增 ZGC 对比）
 set -euo pipefail
 
 CONTEXT="kind-java-experiment"
@@ -80,13 +80,20 @@ run_scenario() {
   echo "Done: $NAME" | tee -a "$OUT"
 }
 
-echo "=== Java 25 K8s Experiment v2 - $(date) ===" | tee "$RESULTS/summary.txt"
+echo "=== Java 25 K8s Experiment v3 - $(date) ===" | tee "$RESULTS/summary.txt"
 
 run_scenario "01-default"      "k8s/scenarios/01-default.yaml"           "java-experiment"       "java-experiment"
 run_scenario "02-heap-fixed"   "k8s/scenarios/02-heap-fixed.yaml"        "java-experiment"       "java-experiment"
-run_scenario "03-cpu-throttle" "k8s/scenarios/05-cpu-throttle.yaml"      "java-experiment"       "java-experiment"
-run_scenario "04-pod-small"    "k8s/scenarios/06-pod-sizing-small.yaml"  "java-experiment-small" "java-experiment-small"
-run_scenario "04-pod-large"    "k8s/scenarios/06-pod-sizing-large.yaml"  "java-experiment-large" "java-experiment-large"
+run_scenario "03-serial-gc"    "k8s/scenarios/03-serial-gc.yaml"         "java-experiment"       "java-experiment"
+run_scenario "04-g1gc"         "k8s/scenarios/04-g1gc.yaml"              "java-experiment"       "java-experiment"
+run_scenario "05-cpu-throttle" "k8s/scenarios/05-cpu-throttle.yaml"      "java-experiment"       "java-experiment"
+run_scenario "06-pod-small"    "k8s/scenarios/06-pod-sizing-small.yaml"  "java-experiment-small" "java-experiment-small"
+run_scenario "06-pod-large"    "k8s/scenarios/06-pod-sizing-large.yaml"  "java-experiment-large" "java-experiment-large"
+run_scenario "07-zgc"          "k8s/scenarios/07-zgc.yaml"               "java-experiment"       "java-experiment"
+run_scenario "08-g1gc-2c2g"   "k8s/scenarios/08-g1gc-2c2g.yaml"         "java-experiment"       "java-experiment"
+run_scenario "09-zgc-2c2g"    "k8s/scenarios/09-zgc-2c2g.yaml"          "java-experiment"       "java-experiment"
+run_scenario "10-g1gc-4c4g"   "k8s/scenarios/10-g1gc-4c4g.yaml"         "java-experiment"       "java-experiment"
+run_scenario "11-zgc-4c4g"    "k8s/scenarios/11-zgc-4c4g.yaml"          "java-experiment"       "java-experiment"
 
 echo "" | tee -a "$RESULTS/summary.txt"
 echo "=== All scenarios complete ===" | tee -a "$RESULTS/summary.txt"

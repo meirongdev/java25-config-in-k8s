@@ -42,16 +42,21 @@
 
 ## 实验场景
 
-基准容器规格：`0.5c / 512Mi`
+基准容器规格：`1c / 1Gi`（v1 曾使用 0.5c/512Mi，后升级以避免 CPU 在所有场景成为瓶颈）
 
 | 场景 | Deployment YAML | JVM 参数 | 资源限制 | 副本数 | 验证目标 |
 |------|-----------------|----------|----------|--------|----------|
-| `01-default` | `scenarios/01-default.yaml` | 无 | 0.5c / 512Mi | 1 | 堆上限仅 ~128MB（25%），GC 为默认选择 |
-| `02-heap-fixed` | `scenarios/02-heap-fixed.yaml` | `-XX:MaxRAMPercentage=75` | 0.5c / 512Mi | 1 | 堆上限提升至 ~384MB（75%） |
-| `03-serial-gc` | `scenarios/03-serial-gc.yaml` | `-XX:+UseSerialGC -XX:MaxRAMPercentage=75` | 0.5c / 512Mi | 1 | GC pause 高，吞吐低 |
-| `04-g1gc` | `scenarios/04-g1gc.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 0.5c / 512Mi | 1 | GC pause 低，吞吐高 |
-| `05-cpu-throttle` | `scenarios/05-cpu-throttle.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 0.1c / 512Mi | 1 | CPU 节流，响应时间骤升，吞吐骤降 |
-| `06-pod-sizing` | `scenarios/06-pod-sizing-small.yaml` / `06-pod-sizing-large.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 0.25c × 3 vs 0.75c × 1 | 3 vs 1 | 相同总 CPU 下，大副本吞吐更高 |
+| `01-default` | `scenarios/01-default.yaml` | 无 | 1c / 1Gi | 1 | 堆上限仅 ~248MB（25%），GC 为 JVM 自动选择 |
+| `02-heap-fixed` | `scenarios/02-heap-fixed.yaml` | `-XX:MaxRAMPercentage=75` | 1c / 1Gi | 1 | 堆上限提升至 ~742MB（75%） |
+| `03-serial-gc` | `scenarios/03-serial-gc.yaml` | `-XX:+UseSerialGC -XX:MaxRAMPercentage=75` | 1c / 1Gi | 1 | 与 04-g1gc 对比 SerialGC 停顿劣势 |
+| `04-g1gc` | `scenarios/04-g1gc.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 1c / 1Gi | 1 | G1GC 基线（GC max 9ms，总停顿 1,509ms） |
+| `05-cpu-throttle` | `scenarios/05-cpu-throttle.yaml` | `-XX:MaxRAMPercentage=75` | 0.25c / 1Gi | 1 | CPU 节流导致 GC 停顿 318ms，业务请求 100% EOF |
+| `06-pod-sizing` | `scenarios/06-pod-sizing-small.yaml` / `06-pod-sizing-large.yaml` | `-XX:MaxRAMPercentage=75` | 0.5c × 3 vs 1.5c × 1 | 3 vs 1 | 相同总 CPU（1.5c）下，大副本 GC 停顿 -70%，p95 -37% |
+| `07-zgc` | `scenarios/07-zgc.yaml` | `-XX:+UseZGC -XX:MaxRAMPercentage=75` | 1c / 1Gi | 1 | ZGC GC 停顿 1ms（-89% vs G1），但响应时间 +22% |
+| `08-g1gc-2c2g` | `scenarios/08-g1gc-2c2g.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 2c / 2Gi | 1 | 双倍资源下 G1GC 表现 |
+| `09-zgc-2c2g` | `scenarios/09-zgc-2c2g.yaml` | `-XX:+UseZGC -XX:MaxRAMPercentage=75` | 2c / 2Gi | 1 | 双倍资源下 ZGC vs G1GC（资源充裕时 ZGC 代价更小） |
+| `10-g1gc-4c4g` | `scenarios/10-g1gc-4c4g.yaml` | `-XX:+UseG1GC -XX:MaxRAMPercentage=75` | 4c / 4Gi | 1 | 高配下 G1GC 基线 |
+| `11-zgc-4c4g` | `scenarios/11-zgc-4c4g.yaml` | `-XX:+UseZGC -XX:MaxRAMPercentage=75` | 4c / 4Gi | 1 | 高配下 ZGC（预期代价趋近于零） |
 
 ---
 
@@ -60,8 +65,11 @@
 ```
 场景01 vs 场景02  →  默认堆(25%) vs 修复堆(75%)
 场景03 vs 场景04  →  SerialGC vs G1GC（相同堆配置下 GC 行为差异）
-场景04 vs 场景05  →  充足 CPU vs CPU 节流
-场景06-small vs 场景06-large  →  3×0.25c vs 1×0.75c（总 CPU 相同）
+场景04 vs 场景05  →  充足 CPU vs CPU 节流（250m 下服务完全不可用）
+场景06-small vs 场景06-large  →  3×0.5c vs 1×1.5c（总 CPU 相同，大副本 GC 更优）
+场景04 vs 场景07  →  G1GC vs ZGC（1c 下 ZGC 停顿更低但吞吐略低）
+场景08 vs 场景09  →  2c/2Gi 下 G1GC vs ZGC
+场景10 vs 场景11  →  4c/4Gi 下 G1GC vs ZGC（验证资源充裕时 ZGC 优势显现）
 ```
 
 ---
@@ -76,7 +84,7 @@
 - `http_req_failed`：错误率
 
 **Actuator 端点（JVM 指标）：**
-- `jvm.memory.max`：堆上限（验证 128MB vs 384MB）
+- `jvm.memory.max`：堆上限（验证 ~248MB vs ~742MB）
 - `jvm.memory.used`：实际堆使用量
 - `jvm.gc.pause`：GC 停顿时间（count + max + sum）
 
@@ -102,7 +110,12 @@ java25-config-in-k8s/
 │       ├── 04-g1gc.yaml
 │       ├── 05-cpu-throttle.yaml
 │       ├── 06-pod-sizing-small.yaml
-│       └── 06-pod-sizing-large.yaml
+│       ├── 06-pod-sizing-large.yaml
+│       ├── 07-zgc.yaml
+│       ├── 08-g1gc-2c2g.yaml
+│       ├── 09-zgc-2c2g.yaml
+│       ├── 10-g1gc-4c4g.yaml
+│       └── 11-zgc-4c4g.yaml
 ├── k6/
 │   └── load-test.js              # 统一负载脚本
 └── scripts/
@@ -117,10 +130,12 @@ java25-config-in-k8s/
 
 | 对比 | 预期差异 |
 |------|----------|
-| 默认堆 vs 修复堆 | 堆上限 128MB → 384MB，内存利用率 25% → 75% |
-| SerialGC vs G1GC | GC pause max 从数百ms 降至数十ms |
-| 充足CPU vs 节流 | p95 响应时间 5-10x 差异，RPS 大幅下降 |
-| 小副本×3 vs 大副本×1 | 大副本 RPS 明显高于小副本总和 |
+| 默认堆 vs 修复堆 | 堆上限 248MB → 742MB（实测），内存利用率 25% → 75% |
+| SerialGC vs G1GC | GC pause max 从数百ms 降至个位数 ms（待补测 03-serial-gc） |
+| 充足CPU vs 节流 | 250m CPU 下 GC 停顿 318ms，业务请求 100% EOF（已实测） |
+| 小副本×3 vs 大副本×1 | 大副本 p95 -37%，GC max -70%（已实测） |
+| G1GC vs ZGC（1c） | ZGC GC 停顿 -89%，但响应时间 +22%（已实测） |
+| G1GC vs ZGC（2c/4c） | 资源充裕时 ZGC 吞吐损耗趋近于零（场景 08-11，待实测） |
 
 ---
 

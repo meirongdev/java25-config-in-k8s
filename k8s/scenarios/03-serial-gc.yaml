@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-experiment
+  labels:
+    scenario: "03-serial-gc"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-experiment
+  template:
+    metadata:
+      labels:
+        app: java-experiment
+    spec:
+      containers:
+        - name: app
+          image: java-experiment:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:+UseSerialGC -XX:MaxRAMPercentage=75"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1000m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-experiment
+spec:
+  selector:
+    app: java-experiment
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
