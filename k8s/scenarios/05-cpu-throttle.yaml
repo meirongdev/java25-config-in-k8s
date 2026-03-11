@@ -22,14 +22,14 @@ spec:
             - containerPort: 8080
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: "-XX:+UseG1GC -XX:MaxRAMPercentage=75"
+              value: "-XX:MaxRAMPercentage=75"
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "100m"
+              memory: "1Gi"
+              cpu: "250m"
             limits:
-              memory: "512Mi"
-              cpu: "100m"
+              memory: "1Gi"
+              cpu: "250m"
 ---
 apiVersion: v1
 kind: Service

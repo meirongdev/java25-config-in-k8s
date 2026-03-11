@@ -20,7 +20,7 @@ export default function () {
     });
   } else {
     // 40% 请求：CPU 压力（每次 1 秒计算）
-    const res = http.get(`${BASE_URL}/stress/cpu?seconds=1`);
+    const res = http.get(`${BASE_URL}/stress/cpu?seconds=0.3`);
     check(res, {
       'cpu stress 200': (r) => r.status === 200,
     });
