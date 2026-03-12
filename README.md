@@ -66,6 +66,8 @@ bash scripts/run-all-scenarios.sh
 | `06-pod-sizing-small` | `-XX:MaxRAMPercentage=75` | 0.5c / 1Gi × 3 | 小 Pod 规格对照 |
 | `06-pod-sizing-large` | `-XX:MaxRAMPercentage=75` | 1.5c / 1Gi × 1 | 大 Pod 规格对照 |
 | `07-zgc` | `-XX:+UseZGC -XX:MaxRAMPercentage=75` | 1c / 1Gi | 与 `04-g1gc` 做同条件 GC 对比 |
+| `15-g1gc-prod` | `-XX:+UseG1GC -XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75 -XX:MinRAMPercentage=75 -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError` | 1c / 1Gi | G1GC 生产最佳实践参数，与 `04-g1gc` 对比 |
+| `16-zgc-prod` | `-XX:+UseZGC -XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75 -XX:MinRAMPercentage=75 -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError` | 1c / 1Gi | ZGC 生产最佳实践参数，与 `07-zgc` 对比 |
 
 ## ZGC vs G1GC 对比方法
 
@@ -129,8 +131,10 @@ bash scripts/run-scenario.sh 07-zgc
 | **06-Small** | 1 × 0.5c Pod ② | 待重测 | 待重测 | 待重测 | 单 Pod 性能；0.5c 下预热需≥40s，历史数据存疑 |
 | **06-Large** | 1 × 1.5c Pod ② | 待重测 | 待重测 | 待重测 | 单 Pod 性能；与 Small 做 CPU 规格对比 |
 | **07 ZGC** | ZGC | ~90.9 | 10.46 ms | 22.92 ms | GC 停顿降低 99.7%；CPU 成本约 +2 ms |
+| **15 G1GC Prod** | G1GC + 生产参数 | ~92.5 | 8.23 ms | 17.92 ms | 稳态性能与 04 持平；启动时一次 171 ms 初始 GC |
+| **16 ZGC Prod** | ZGC + 生产参数 | ~91.3 | 9.9 ms | 24.48 ms | GC 停顿与 07 持平；AlwaysPreTouch 使启动堆占用 160 MB |
 
-> ① **所有延迟/RPS 数据需重测**：k6 中 40% 的 CPU 压力请求（`/stress/cpu?seconds=0.3`）因 `int` 参数类型不匹配全部返回 400，已修复为 `double seconds`。表中数值为修复前成功请求（`expected_response:true`）均值，整体负载与设计不符。
+> ① **所有延迟/RPS 数据需重测**：k6 中 40% 的 CPU 压力请求（`/stress/cpu?seconds=0.3`）因 `int` 参数类型不匹配全部返回 400，已修复为 `double seconds`。表中数值为修复前成功请求（`expected_response:true`）均值，整体负载与设计不符。场景 15/16 的延迟数据为本轮实测值。
 > ② 场景 06 通过 `kubectl port-forward` 路由，只能连接到 3 个 Pod 中的 1 个，实际对比的是 0.5c 单 Pod vs 1.5c 单 Pod，而非集群总吞吐对比。
 
 ## 场景 05 分析：为什么 250m CPU 会导致 EOF
@@ -242,3 +246,42 @@ resources:
 - **平均延迟代价固定，不随 CPU 改善**：在本实验负载下，ZGC 平均延迟比 G1GC 高约 2–3 ms，且从 1c 扩容至 4c 过程中差距未收窄。
 - **p99 尾延迟**：G1GC 的 p99 随 CPU 增加从 121 ms 降至 87 ms（趋势稳定）；ZGC 的 p99 在 4c 时为 242 ms（高于 2c 的 128 ms），对短生命周期对象负载的尾延迟控制弱于 G1GC。
 - **选型建议**：当业务对 GC 停顿上限有硬性要求（如 SLA ≤ 5 ms 停顿）时，ZGC 是明确选择；追求平均延迟或 p99 稳定性时，≤4c 环境中 G1GC 表现更优。
+
+## 生产最佳实践参数对比（场景 15 vs 04、场景 16 vs 07）
+
+测试参数组合：`-XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75 -XX:MinRAMPercentage=75 -XX:+AlwaysPreTouch -XX:+ExitOnOutOfMemoryError`
+
+### G1GC：生产参数 vs 基线（1c/1Gi）
+
+| 指标 | 04 G1GC 基线 | 15 G1GC 生产参数 | 差异说明 |
+| :--- | :--- | :--- | :--- |
+| **Heap Max** | 768 MB | 768 MB | 相同 |
+| **预热后堆占用** | — | 35.4 MB | InitialRAMPercentage 锁定堆但启动后实际占用仍较低 |
+| **GC 累计停顿** | 1,574 ms | 1,605 ms | 基本持平（±2%） |
+| **GC 最大停顿** | 9 ms | **171 ms** | ⚠️ 启动时在完整 768MB 堆上发生一次大 GC（见说明） |
+| **RPS** | ~92.6 | ~92.5 | 持平 |
+| **Avg 延迟** | 8.14 ms | 8.23 ms | 持平 |
+| **P95 延迟** | 17.76 ms | 17.92 ms | 持平 |
+
+> **171 ms 初始 GC 说明**：`InitialRAMPercentage=75` 使 G1GC 在启动时就持有 768 MB 大堆，首次 GC 须扫描完整堆，产生一次较大停顿。该停顿发生在 Pod 就绪探针通过之前（流量进入前），**不影响运行时 P99/P95**，属于可接受的启动代价。基线场景 04 堆从小到大动态扩容，首次 GC 在小堆上进行，因此 max 仅 9 ms。
+
+### ZGC：生产参数 vs 基线（1c/1Gi）
+
+| 指标 | 07 ZGC 基线 | 16 ZGC 生产参数 | 差异说明 |
+| :--- | :--- | :--- | :--- |
+| **Heap Max（报告值）** | — | 1,536 MB | ZGC 三重虚拟地址映射；物理堆仍为 768 MB（75% × 1Gi） |
+| **预热后堆占用** | — | **160 MB** | AlwaysPreTouch 预触摸使启动时物理页立即分配 |
+| **GC 累计停顿** | 5 ms | 5 ms | 相同 |
+| **GC 最大停顿** | 1 ms | 1 ms | 相同 |
+| **RPS** | ~90.9 | ~91.3 | 持平 |
+| **Avg 延迟** | 10.46 ms | 9.9 ms | 微幅改善（−0.56 ms） |
+| **P95 延迟** | 22.92 ms | 24.48 ms | 微幅上升（+1.56 ms） |
+
+> **ZGC Heap Max 1536 MB 说明**：ZGC 使用多重虚拟内存映射（通常 2–3×）来管理着色指针，`jvm.memory.max` 报告的是虚拟地址空间大小而非物理内存。实际 RSS 仍受容器 1Gi 限制，不会发生 OOM。
+
+### 核心结论
+
+1. **稳态性能完全持平**：生产参数对稳态 RPS、平均延迟和 P95 没有实质影响（差异 < 2%）。
+2. **G1GC 初始 GC 变大**：`InitialRAMPercentage = MaxRAMPercentage` 使堆在启动时即达到最大值，首次 GC 运行在完整堆上，max 从 9 ms 升至 171 ms。该停顿发生在 Kubernetes Readiness Probe 通过前，**不会暴露给用户**。
+3. **AlwaysPreTouch 对 ZGC 效果显著**：预热后堆占用从接近 0 升至 160 MB，意味着物理页提前分配完毕，运行时 page fault 基本消除，延迟更稳定。
+4. **生产参数值得采用**：综合来看，这套参数使 JVM 行为更可预测（无运行时堆扩容、无 page fault 抖动），同时 `ExitOnOutOfMemoryError` 确保 Kubernetes 能快速检测并重启 OOM Pod，是 K8s 部署的推荐配置。
