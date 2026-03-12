@@ -40,7 +40,7 @@ collect_jvm() {
 }
 
 run_scenario() {
-  local NAME=$1 YAML=$2 DEPLOY=$3 SVC=$4
+  local NAME=$1 YAML=$2 DEPLOY=$3 SVC=$4 WARMUP=${5:-20}
   local OUT="$RESULTS/${NAME}.txt"
   : > "$OUT"
 
@@ -50,8 +50,8 @@ run_scenario() {
 
   kubectl apply -f "$YAML" --context "$CONTEXT" 2>&1 | tail -2 | tee -a "$OUT"
   kubectl rollout status "deployment/$DEPLOY" --timeout=180s --context "$CONTEXT" | tee -a "$OUT"
-  echo "Warming up JVM (20s)..." | tee -a "$OUT"
-  sleep 20
+  echo "Warming up JVM (${WARMUP}s)..." | tee -a "$OUT"
+  sleep "$WARMUP"
 
   PF_METRICS=$(start_pf "$SVC" "$METRICS_PORT"); sleep 2
 
@@ -87,8 +87,8 @@ run_scenario "02-heap-fixed"   "k8s/scenarios/02-heap-fixed.yaml"        "java-e
 run_scenario "03-serial-gc"    "k8s/scenarios/03-serial-gc.yaml"         "java-experiment"       "java-experiment"
 run_scenario "04-g1gc"         "k8s/scenarios/04-g1gc.yaml"              "java-experiment"       "java-experiment"
 run_scenario "05-cpu-throttle" "k8s/scenarios/05-cpu-throttle.yaml"      "java-experiment"       "java-experiment"
-run_scenario "06-pod-small"    "k8s/scenarios/06-pod-sizing-small.yaml"  "java-experiment-small" "java-experiment-small"
-run_scenario "06-pod-large"    "k8s/scenarios/06-pod-sizing-large.yaml"  "java-experiment-large" "java-experiment-large"
+run_scenario "06-pod-small"    "k8s/scenarios/06-pod-sizing-small.yaml"  "java-experiment-small" "java-experiment-small" 40
+run_scenario "06-pod-large"    "k8s/scenarios/06-pod-sizing-large.yaml"  "java-experiment-large" "java-experiment-large" 30
 run_scenario "07-zgc"          "k8s/scenarios/07-zgc.yaml"               "java-experiment"       "java-experiment"
 run_scenario "08-g1gc-2c2g"   "k8s/scenarios/08-g1gc-2c2g.yaml"         "java-experiment"       "java-experiment"
 run_scenario "09-zgc-2c2g"    "k8s/scenarios/09-zgc-2c2g.yaml"          "java-experiment"       "java-experiment"

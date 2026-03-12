@@ -24,8 +24,8 @@ public class StressService {
      * 持续计算质数，直到 seconds 秒超时。
      * 用于产生 CPU 压力。
      */
-    public long computePrimes(int seconds) {
-        long endTime = System.currentTimeMillis() + ((long) seconds * 1000);
+    public long computePrimes(double seconds) {
+        long endTime = System.currentTimeMillis() + (long)(seconds * 1000);
         long count = 0;
         long n = 2;
         while (System.currentTimeMillis() < endTime) {

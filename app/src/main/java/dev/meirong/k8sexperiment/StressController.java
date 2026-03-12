@@ -26,7 +26,7 @@ public class StressController {
 
     @GetMapping("/cpu")
     public ResponseEntity<Map<String, Object>> stressCpu(
-            @RequestParam(defaultValue = "2") int seconds) {
+            @RequestParam(defaultValue = "2.0") double seconds) {
         long primesFound = stressService.computePrimes(seconds);
         return ResponseEntity.ok(Map.of(
                 "duration_seconds", seconds,
